@@ -127,5 +127,5 @@ if __name__ == "__main__":
     note_arr=np.array(note_arr)
     print(note_arr.shape)
     print(note_arr[4117])
-    play_midi_from_mid(note_arr[4117])
+    play_midi_from_mid(seq2midi(note_arr[4117],npc=2,tempo=75))
     note_arr.dump("Note_list.npdump")
