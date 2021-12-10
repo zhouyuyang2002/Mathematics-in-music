@@ -29,34 +29,59 @@ ref = np.array([78, -1, 78, 76, 73, -1, -1, 71, 69, -1, -1, -1, -1, -1, -1, -1,
             78, -1, 78, 76, 73, -1, 71, -1, 69, -1, -1, -1, -1, -1, -1, -1,
             73, 76, 73, 71, 69, -1, 66, -1, 64, -1, -1, -1, -1, -1, -1, -1])
 popN = 3000
-threshold = 60
+threshold = 75
     
-def mutate(pattern):
+def mutate(pattern,score):
     random.seed(datetime.now())
     idx = -1
     seq = pattern
+    
+    def abs(x):
+        if x < 0:
+            return -x
+        return x
+    # 基于上一个音符 pre_note, 修改前的音符 note ,返回出一个随机音符
+    def rand_note(pre_note,note):
+        sum = 0.0
+        prob_list = []
+        for i in range(48 , 84+1):
+            prob = 0
+            prob = prob + 1.0/(0.1 * ((i-66) ** 2) + 1)
+            prob = prob + 0.2/(0.4 * abs(i-note) + 3)
+            prob = prob + 0.4/(0.4 * abs(i-pre_note) + 3)
+            prob_list.append(prob)
+            sum = sum + prob
+        rp = random.uniform(0,1) * sum
+        l = len(prob_list)
+        for i in range(0, l):
+            if rp <= (prob_list[i] + 1e-9):
+                return i+48
+            rp = rp - prob_list[i]
+        return 84
+    prev_note = 60
     for i in range(0, 128):
         if seq[i] != -1:
             c = random.uniform(0,1)
-            if c < 0.10: # 一个交换
+            if c < 0.10 * 40 / score: # 一个交换
                 if idx >= 0: 
                     #print(idx, i)
                     seq[idx], seq[i] = seq[i], seq[idx]
                     idx = -1
                 else:
                     idx = i
-            elif c < 0.15: # 换个音
-                seq[i] = random.randint(48, 84)
-            elif c < 0.20: # 升或降8度 往中间凑
+            elif c < 0.15 * 40 / score: # 换个音
+                seq[i] = rand_note(prev_note,seq[i]);
+            elif c < 0.20 * 40 / score: # 升或降8度 往中间凑
                 if seq[i] > 72:
                     seq[i] = seq[i] - 12
                 if seq[i] < 60:
                     seq[i] = seq[i] + 12
-    
+            prev_note = seq[i]
+    # 得分越高，修改概率越低（希望能找到更好的乐谱）
     return seq
 
 
-ratio = [0.5, 0.3, 0.2]
+ratio = [0.35, 0.25, 0.30, 0.1]
 
 def fit(seq):
     #规定一下目标的调调，看有多少个偏离的音，暂定C大调
@@ -74,21 +99,49 @@ def fit(seq):
     # f3相对音高序列相似度
     # f4节内平均音高的差异性，平方差的均值
     # f5离调音的比例
-    f0, f1, f2, f3, f4, f5 = 0, 0, 0, 0, 0, 0
+    # f6不和谐音程的比例
+    f0, f1, f2, f3, f4, f5, f6 = 0, 0, 0, 0, 0, 0, 0
+    
     for i in range(0, 128, 16): 
         note = []
         ref_note = []
         for j in range(i, i + 16):
             if seq[j] != -1:
                 note.append(seq[j])
-                ref_note.append(ref[j])
                 if not (seq[j] in tone):
                     f2 = f2 + 1 
                     f5 = f5 + 1 
+            if ref[j] != -1:
+                ref_note.append(ref[j])
         f0 = f0 + abs(np.mean(note) - np.mean(ref_note))
         f1 = f1 + abs(np.var(note) - np.var(ref_note))
         f4 = f4 + (np.mean(note) - np.mean(ref_note)) ** 2
     
+    def cal_f6():
+        note = []
+        for i in seq:
+            if i != -1:
+                note.append(i)
+        l, sum0, sum1 = len(note), 0, 0
+        good_pair = [-8, -7, -5, -4, -2, 2, 4, 5, 7, 8]
+        for i in range(0, l-1):
+            dif = note[i+1] - note[i]
+            sum0 = sum0 + 1
+            if dif in good_pair:
+                sum1 = sum1 + 1
+            if dif == 0:
+               sum1 = sum1 - 1
+        l = len(seq)
+        for i in range(0, l-1):
+            if seq[i] != -1:
+                for j in range(1, 8):
+                    if (i+j < l) and (seq[i+j] != -1):
+                        dif = seq[i+j] - seq[i]
+                        sum0 = sum0 + j ** (-1)
+                        if dif in good_pair:
+                            sum1 = sum1 + j ** (-1)
+        return sum1 / sum0
+    f6 = cal_f6() * 100;
     f0 = f0 / 8
     f1 = f1 / 8 # 对音节取平均
     f2 = 100.0 / (1 + f2) # 有多少个离调的音，认为离调的音越少越好
@@ -111,7 +164,7 @@ def fit(seq):
 
     
     #print(f0, f1, f2, f3, f4, f5)
-    value = ratio[0] * f3 + ratio[1] * f4 + ratio[2] * f5
+    value = ratio[0] * f3 + ratio[1] * f4 + ratio[2] * f5 + ratio[3] * f6
     return value
 
 
@@ -120,8 +173,8 @@ def takeFit(ele): #算一个特定序列的值
 
 def generate(population):
     generation = population
-    for k in range(0, 50): #迭代的最高轮次
-        print(np.array(generation).shape)
+    for k in range(0, 500): #迭代的最高轮次
+        print("Round = ",k,np.array(generation).shape)
         pop_fit = []
         for x in generation: #保证每一代都有>= popN个人
             ele = list(x)
@@ -135,15 +188,15 @@ def generate(population):
                 for msg in track:
                     print(msg)
             S2M.play_midi_from_mid(mid)
-        
+            mid.save("TestMusic.midi")
         
         print(pop_fit[0][-1]) #看下这一代最优秀的有多秀
         print(pop_fit[1][-1]) #看下这一代最优秀的有多秀
         print(pop_fit[2][-1]) #看下这一代最优秀的有多秀
         print(pop_fit[3][-1]) #看下这一代最优秀的有多秀
         
-        if pop_fit[0][-1] > threshold:
-            return list(pop_fit[0][0])
+        #if pop_fit[0][-1] > threshold:
+        #    return list(pop_fit[0][0])
         
         generation = [] #保留前popN的人
         counter = 0
@@ -157,7 +210,7 @@ def generate(population):
         #弄点无性繁殖，2k
         for i in range(0, 1000): 
             for j in range(0, 2):
-                generation.append(mutate(list(pop_fit[i][0])))
+                generation.append(mutate(list(pop_fit[i][0]),pop_fit[i][-1]))
                 
         #在弄点有性繁殖, 1k个后代
         for l in range(0, 1000):
@@ -166,7 +219,7 @@ def generate(population):
             if i != j:
                 generation.append(list(pop_fit[i][0])[:64] + list(pop_fit[j][0])[64:])
             else:
-                generation.append(mutate(list(pop_fit[i][0]))) 
+                generation.append(mutate(list(pop_fit[i][0]),pop_fit[i][1])) 
 
         generation = list(set([tuple(x) for x in generation])) # 去重
 
