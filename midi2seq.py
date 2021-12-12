@@ -37,7 +37,8 @@ def seq2midi(seq,npc=4,tempo=75,key='C'):
         if i!=-1:
             if prev_note==-1:
                 raise RuntimeError("错误的输入格式 in seq2midi")
-            playNote(prev_note,prev_len*cpn)
+            if prev_len!=0:
+                playNote(prev_note,prev_len*cpn)
             prev_note,prev_len=i,1
         else:
             prev_len=prev_len+1
@@ -102,13 +103,44 @@ def Read_midi(dir):
             if time*256!=msg.time:
                 print("Bad message:",msg)
                 return [],1;
-            note_list.append(note)
+            if time!=0:
+                note_list.append(note)
             for i in range(1,time):
                 note_list.append(-1)
     return note_list,0
     
-
+# 读入生成的歌曲!!!
+def Read_midi_from_gen(dir):
+    print("Reading MIDI File",dir)
+    mid=mido.MidiFile(dir)
+    track=mid.tracks[0]
+    note_list=[]
+    note=1
+    for msg in track:
+        print(msg)
+        
+        if msg.type == 'note_on':
+            note=msg.note
+        elif msg.type == 'note_off':
+            # 假设一个 16 分音符的时值为 256ms
+            time=int((msg.time+119)/120)
+            # 如果出现了不是十六分音符的音符，则会整条删除
+            # 暂时不考虑空拍子的情况
+            if time*120!=msg.time:
+                print("Bad message:",msg)
+                return [],1;
+            if time!=0:
+                note_list.append(note)
+            for i in range(1,time):
+                note_list.append(-1)
+        
+    return note_list,0
 if __name__ == "__main__":
+    note_list,bad_flag=Read_midi_from_gen("mutate.midi")
+    print(note_list)
+    mid=seq2midi(note_list,npc = 4)
+    play_midi_from_mid(mid)
+"""
     dir_list=get_midi()
     note_arr=[]
     for dir in dir_list:
@@ -129,3 +161,4 @@ if __name__ == "__main__":
     print(note_arr[4117])
     play_midi_from_mid(seq2midi(note_arr[4117],npc=2,tempo=75))
     note_arr.dump("Note_list.npdump")
+"""

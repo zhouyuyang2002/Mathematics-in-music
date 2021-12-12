@@ -10,14 +10,6 @@ import mido
 import os
 
 # 手搓数据不易，且用且珍惜
-CountingStar = [78, -1, 78, 76, 73, -1, -1, 71, 69, -1, -1, -1, -1, -1, -1, -1,
-            73, -1, -1, 71, 69, -1, 66, 64, 64, -1, -1, -1, -1, -1, -1, -1,
-            64, -1, -1, 66, 64, -1, -1, 66, 69, -1, -1, 71, 73, -1, 76, -1,
-            78, -1, -1, 76, 73, 71, 69, -1, 69, -1, -1, -1, -1, -1, -1, -1, 
-            66, 69, 71, 73, 66, 69, 71, 73, 66, 69, 71, 73, 66, 69, 71, 73, 
-            66, 69, 71, 73, 66, 69, 71, 73, 66, 69, 71, 73, 66, 69, 71, 73, 
-            78, -1, 78, 76, 73, -1, 71, -1, 69, -1, -1, -1, -1, -1, -1, -1,
-            73, 76, 73, 71, 69, -1, 66, -1, 64, -1, -1, -1, -1, -1, -1, -1]
 
 CountingStar = [74, -1, -1, -1, 76, -1, -1, -1, 79, -1, -1, -1, 76, -1, -1, -1,
                 74, -1, 76, -1, 74, 72, -1, 76, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -29,15 +21,6 @@ CountingStar = [74, -1, -1, -1, 76, -1, -1, -1, 79, -1, -1, -1, 76, -1, -1, -1,
                 76, -1, 74, -1, 74, -1, 72, -1, 72, -1, 69, -1, -1, -1, -1, -1,]
 # 全局的一个参考目标
 ref = np.array(CountingStar)
-
-"""[78, -1, 78, 76, 73, -1, -1, 71, 69, -1, -1, -1, -1, -1, -1, -1,
-            73, -1, -1, 71, 69, -1, 66, 64, 64, -1, -1, -1, -1, -1, -1, -1,
-            64, -1, -1, 66, 64, -1, -1, 66, 69, -1, -1, 71, 73, -1, 76, -1,
-            78, -1, -1, 76, 73, 71, 69, -1, 69, -1, -1, -1, -1, -1, -1, -1, 
-            66, 69, 71, 73, 66, 69, 71, 73, 66, 69, 71, 73, 66, 69, 71, 73, 
-            66, 69, 71, 73, 66, 69, 71, 73, 66, 69, 71, 73, 66, 69, 71, 73, 
-            78, -1, 78, 76, 73, -1, 71, -1, 69, -1, -1, -1, -1, -1, -1, -1,
-            73, 76, 73, 71, 69, -1, 66, -1, 64, -1, -1, -1, -1, -1, -1, -1])"""
 popN = 3000
 threshold = 75
     
@@ -74,16 +57,16 @@ def mutate(pattern, score):
     for i in range(0, 128):
         if seq[i] != -1:
             c = random.uniform(0,1)
-            if c < 0.15 * 40 / score: # 一个交换
+            if c < 0.10 * 40 / score: # 一个交换
                 if idx >= 0: 
                     #print(idx, i)
                     seq[idx], seq[i] = seq[i], seq[idx]
                     idx = -1
                 else:
                     idx = i
-            elif c < 0.18 * 40 / score: # 换个音
+            elif c < 0.15 * 40 / score: # 换个音
                 seq[i] = rand_note(prev_note,seq[i])
-            elif c < 0.21 * 40 / score: # 升或降8度 往中间凑
+            elif c < 0.20 * 40 / score: # 升或降8度 往中间凑
                 if seq[i] > 72:
                     seq[i] = seq[i] - 12
                 if seq[i] < 60:
@@ -93,7 +76,7 @@ def mutate(pattern, score):
     return seq
 
 
-ratio = [0.45, 0.30, 0.15, 0.10]
+ratio = [0.55, 0.15, 0.15, 0.15]
 
 def fit(seq):
     #规定一下目标的调调，看有多少个偏离的音，暂定C大调
@@ -193,7 +176,6 @@ def takeFit(ele):
 def generate(population):
     generation = population
     for k in range(0, 500): #迭代的最高轮次
-        random.seed(datetime.now())
         print("Round = ",k,np.array(generation).shape)
         pop_fit = []
         for x in generation: #保证每一代都有>= popN个人
@@ -201,15 +183,15 @@ def generate(population):
             pop_fit.append((ele, fit(ele)))
         pop_fit.sort(key=takeFit, reverse=True)
         
-        if pop_fit[0][-1] > 75:
+        if pop_fit[0][-1] > 60:
             mid = S2M.seq2midi(pop_fit[0][0], npc=2, tempo=75)
             for i, track in enumerate(mid.tracks):
                 print('Track {}: {}'.format(i, track.name))
                 for msg in track:
                     print(msg)
             S2M.play_midi_from_mid(mid)
-            mid.save("TestMusic_CountingStar.midi")
-
+            mid.save("TestMusic.midi")
+        
         print(pop_fit[0][-1], pop_fit[1][-1], pop_fit[2][-1]) #看下这一代最优秀的有多秀
         
         #if pop_fit[0][-1] > threshold:
@@ -223,25 +205,20 @@ def generate(population):
             if counter == popN:
                 break
 
-        # 换个思路, 维护一个逐小节的基因池子, 放了前popN/4的基因 对不起 只有人上人才配传承基因
-        pool = []
-        for i in range(0, 128, 16):
-            pooli = []
-            pitches = []
-            for e in range(0, popN // 4): # ele是pop_fit里的元素 形如(seq, fitness)
-                pitches = list(pop_fit[e][0])[i : i + 16]
-                pooli.append(pitches)
-            pool.append(list(pooli))
-
-        # 现在开始造新的数据
-        for k in range(0, 1000):
-            notes = []
-            newone = []
-            for i in range(0, 128, 16):
-                index = random.randint(0, popN // 4 - 1)
-                notes = notes + pool[i // 16][index]
-            newone = mutate(notes, fit(notes))
-            generation.append(newone)
+        #开始变异
+        #弄点无性繁殖，2k
+        for i in range(0, 1000): 
+            for j in range(0, 2):
+                generation.append(mutate(list(pop_fit[i][0]),pop_fit[i][-1]))
+                
+        #在弄点有性繁殖, 1k个后代
+        for l in range(0, 1000):
+            i = random.randint(0, popN - 1)
+            j = random.randint(0, popN - 1)
+            if i != j:
+                generation.append(list(pop_fit[i][0])[:64] + list(pop_fit[j][0])[64:])
+            else:
+                generation.append(mutate(list(pop_fit[i][0]),pop_fit[i][1])) 
 
         generation = list(set([tuple(x) for x in generation])) # 去重
 
@@ -276,7 +253,7 @@ if __name__ == "__main__":
         for msg in track:
             print(msg)
     S2M.play_midi_from_mid(mid)
-    '''
+    '''  
     print(fit(CountingStar))
     time.sleep(5)
     #注: 现在的情况是，MIDI里的东西过于nb, mutate过于拉垮，该用随机数据看看有没有长进
@@ -291,7 +268,7 @@ if __name__ == "__main__":
         align_ele = rhythmAlign(ele)
         if len(align_ele):
             align_arr.append(align_ele)
-    print(np.array(align_arr).shape)
+
     '''
     # get random data
     align_arr = []

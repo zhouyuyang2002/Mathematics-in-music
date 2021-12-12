@@ -33,7 +33,8 @@ def seq2midi(seq,npc=4,tempo=75,key='C'):
         if i!=-1:
             if prev_note==-1:
                 raise RuntimeError("错误的输入格式 in seq2midi")
-            playNote(prev_note,prev_len*cpn)
+            if prev_len!=0:
+                playNote(prev_note,prev_len*cpn)
             prev_note,prev_len=i,1
         else:
             prev_len=prev_len+1
